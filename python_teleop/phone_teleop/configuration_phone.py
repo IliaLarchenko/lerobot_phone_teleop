@@ -22,19 +22,27 @@ from lerobot.common.teleoperators.config import TeleoperatorConfig
 @TeleoperatorConfig.register_subclass("phone")
 @dataclass
 class PhoneTeleopConfig(TeleoperatorConfig):
-    # Server settings for phone communication
-    server_host: str = "0.0.0.0"  # Listen on all interfaces
-    server_port: int = 8080
+    """
+    Configuration for phone-based teleoperator.
     
-    # Phone IP address (optional, for direct connection)
-    phone_ip: str = None
+    The Python code connects as WebSocket client to the phone server
+    to send robot observations (state vector + camera feeds) and 
+    receive velocity commands back.
+    """
+    
+    # Phone connection settings (phone acts as server)
+    phone_ip: str = "192.168.1.102"  # IP address of the phone
+    phone_port: int = 8080           # Port where phone server listens
+    
+    # Connection settings
+    connection_timeout_s: float = 10.0  # Timeout for connecting to phone
+    reconnect_interval_s: float = 2.0   # Interval between reconnection attempts
     
     # Video streaming settings
-    video_quality: int = 80  # JPEG quality 0-100
-    video_fps: int = 30
+    video_quality: int = 80  # JPEG quality 0-100 for compressing camera feeds
     
-    # Control settings
-    max_linear_velocity: float = 0.5  # m/s
-    max_angular_velocity: float = 1.0  # rad/s
+    # Control settings  
+    max_linear_velocity: float = 0.3  # m/s limit for x.vel and y.vel
+    max_angular_velocity: float = 0.5  # rad/s limit for theta.vel
     
     mock: bool = False 

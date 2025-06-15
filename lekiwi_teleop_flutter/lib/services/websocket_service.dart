@@ -23,6 +23,11 @@ class WebSocketService {
   bool get isConnected => _channel != null;
   String? _deviceIp;
 
+  // Current velocity commands to send to Python
+  double _xVel = 0.0;
+  double _yVel = 0.0;
+  double _thetaVel = 0.0;
+
   Future<void> startServer() async {
     if (_server != null) {
       debugPrint('Server already running.');
@@ -43,8 +48,12 @@ class WebSocketService {
           (message) {
             try {
               final data = json.decode(message);
-              // For now, we only receive control commands, not display them
-               _messageController.add(data);
+              debugPrint('📨 Received from robot: ${data['type']}');
+              
+              // Handle observation data from Python
+              if (data['type'] == 'observation') {
+                _messageController.add(data);
+              }
             } catch (e) {
               debugPrint('❌ Error decoding robot message: $e');
             }
@@ -69,13 +78,41 @@ class WebSocketService {
     }
   }
 
-  void sendFeedback(Map<String, dynamic> feedbackData) {
+  // Send velocity commands to Python (from joystick input)
+  void sendJoystickInput(double x, double y) {
+    // Convert joystick input (-1 to 1) to velocity commands
+    // y controls forward/backward (x.vel), x controls left/right (y.vel)
+    _xVel = y * 0.3; // Forward/backward, max 0.3 m/s
+    _yVel = -x * 0.3; // Left/right, max 0.3 m/s (inverted for intuitive control)
+    _thetaVel = 0.0; // No rotation from joystick for now
+    
+    _sendActionMessage();
+  }
+
+  // Send rotation command (from IMU or other input)
+  void sendRotationInput(double theta) {
+    _thetaVel = theta * 0.5; // Max 0.5 rad/s
+    _sendActionMessage();
+  }
+
+  // Emergency stop
+  void sendEmergencyStop() {
+    _xVel = 0.0;
+    _yVel = 0.0;
+    _thetaVel = 0.0;
+    _sendActionMessage();
+  }
+
+  void _sendActionMessage() {
     if (!isConnected) return;
+    
     final message = {
-      'type': 'feedback',
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      ...feedbackData,
+      'type': 'action',
+      'x.vel': _xVel,
+      'y.vel': _yVel,
+      'theta.vel': _thetaVel,
     };
+    
     _sendMessage(message);
   }
 

@@ -19,7 +19,7 @@ class _TeleopScreenState extends State<TeleopScreen> {
   
   // State
   bool _useIMU = false;
-  Map<String, dynamic>? _latestFeedbackData;
+  Map<String, dynamic>? _latestObservationData;
   StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
 
   @override
@@ -27,8 +27,8 @@ class _TeleopScreenState extends State<TeleopScreen> {
     super.initState();
     _webSocketService.startServer();
     _webSocketService.messageStream.listen((message) {
-      if (message['type'] == 'feedback' && mounted) {
-        setState(() => _latestFeedbackData = message);
+      if (message['type'] == 'observation' && mounted) {
+        setState(() => _latestObservationData = message);
       }
     });
     _initSensors();
@@ -37,14 +37,9 @@ class _TeleopScreenState extends State<TeleopScreen> {
   void _initSensors() {
     _gyroscopeSubscription = gyroscopeEventStream().listen((GyroscopeEvent event) {
       if (_useIMU) {
-        // Send gyroscope data for robot control
-        _webSocketService.sendFeedback({
-          'type': 'imu',
-          'roll': event.y, // Corresponds to roll on a phone held in landscape
-          'pitch': event.x, // Corresponds to pitch
-          'yaw': event.z,
-          'use_imu': true,
-        });
+        // Use gyroscope for rotation control
+        // event.z corresponds to yaw rotation when phone is in landscape
+        _webSocketService.sendRotationInput(event.z);
       }
     });
   }
@@ -79,8 +74,20 @@ class _TeleopScreenState extends State<TeleopScreen> {
   Widget _buildVideoBackground() {
     return Row(
       children: [
-        Expanded(child: VideoDisplayWidget(feedbackData: _latestFeedbackData, cameraKey: 'camera1')),
-        Expanded(child: VideoDisplayWidget(feedbackData: _latestFeedbackData, cameraKey: 'camera2')),
+        // Front camera (left side)
+        Expanded(
+          child: VideoDisplayWidget(
+            observationData: _latestObservationData, 
+            cameraKey: 'front'
+          )
+        ),
+        // Wrist camera (right side)  
+        Expanded(
+          child: VideoDisplayWidget(
+            observationData: _latestObservationData, 
+            cameraKey: 'wrist'
+          )
+        ),
       ],
     );
   }
@@ -96,7 +103,7 @@ class _TeleopScreenState extends State<TeleopScreen> {
             child: JoystickWidget(
               onMove: (x, y) {
                 if (!_useIMU) {
-                  _webSocketService.sendFeedback({'type': 'joystick', 'x': x, 'y': y});
+                  _webSocketService.sendJoystickInput(x, y);
                 }
               },
             ),
@@ -113,20 +120,82 @@ class _TeleopScreenState extends State<TeleopScreen> {
                   useIMU: _useIMU,
                   onToggle: (value) => setState(() => _useIMU = value),
                 ),
+                // State display
+                _buildStateDisplay(),
                 // Emergency Stop
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () => _webSocketService.sendFeedback({'type': 'emergency_stop'}),
+                    onPressed: () => _webSocketService.sendEmergencyStop(),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red[700]?.withOpacity(0.9),
                       padding: const EdgeInsets.symmetric(vertical: 20),
                     ),
-                    child: const Text('STOP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                    child: const Text(
+                      'STOP', 
+                      style: TextStyle(
+                        color: Colors.white, 
+                        fontWeight: FontWeight.bold, 
+                        fontSize: 18
+                      )
+                    ),
                   ),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStateDisplay() {
+    final data = _latestObservationData?['data'] as Map<String, dynamic>?;
+    final stateData = data?['observation.state'] as Map<String, dynamic>?;
+    
+    if (stateData == null || stateData['type'] != 'state') {
+      return Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.grey[800],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          'No robot state',
+          style: TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+      );
+    }
+
+    final List<dynamic> stateVector = stateData['data'] as List<dynamic>;
+    
+    return Container(
+      padding: EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.blue[900]?.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Robot State',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Arm: ${stateVector.take(6).map((v) => v.toStringAsFixed(2)).join(", ")}',
+            style: TextStyle(color: Colors.grey[300], fontSize: 10),
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            'Base: ${stateVector.skip(6).take(3).map((v) => v.toStringAsFixed(2)).join(", ")}',
+            style: TextStyle(color: Colors.grey[300], fontSize: 10),
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
