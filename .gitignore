@@ -1,0 +1,15 @@
+# Build artifacts
+**/build/
+**/.dart_tool/
+
+# Android
+**/android/local.properties
+**/android/**/*.iml
+**/android/build/
+
+# IDE
+**/.idea/
+**/*.iml
+
+# Reports
+**/reports/

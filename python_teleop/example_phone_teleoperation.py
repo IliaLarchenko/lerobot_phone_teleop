@@ -26,13 +26,13 @@ logger = logging.getLogger(__name__)
 def main():
     # Robot configuration
     robot_config = LeKiwiClientConfig(
-        remote_ip="robotpi.local", 
+        remote_ip="LEKIWI_ROBOT_IP", 
         id="my_awesome_kiwi"
     )
     
     # Phone teleoperator configuration - set your phone's IP address here
     phone_config = PhoneTeleopConfig(
-        phone_ip="192.168.1.102",  # Change this to your phone's IP
+        phone_ip="PHONE_IP",  # Change this to your phone's IP
         phone_port=8080,
         video_quality=70,  # Lower quality for faster streaming
         max_linear_velocity=0.25,  # Updated to match app settings
@@ -80,7 +80,6 @@ def main():
             processed_observation = {}
             for key, value in observation.items():
                 if isinstance(value, torch.Tensor):
-                    # Convert torch tensor to numpy
                     processed_observation[key] = value.numpy()
                 else:
                     processed_observation[key] = value
@@ -146,7 +145,7 @@ def main():
                     logger.info(f"Joint positions: {dict((k, f'{v:.1f}') for k, v in current_joint_positions.items())}")
             
             # Small delay to avoid overwhelming the system
-            time.sleep(0.05)  # 20 Hz
+            time.sleep(0.02)  # 50 Hz
             
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received. Exiting...")

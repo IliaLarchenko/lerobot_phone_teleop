@@ -17,7 +17,7 @@ class PhoneTeleopConfig(TeleoperatorConfig):
     """
     
     # Phone connection settings (phone acts as server)
-    phone_ip: str = "192.168.1.102"  # IP address of the phone
+    phone_ip: str = "192.168.1.100"  # IP address of the phone
     phone_port: int = 8080           # Port where phone server listens
     
     # Connection settings
