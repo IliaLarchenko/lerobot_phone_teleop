@@ -13,7 +13,6 @@ This example:
 
 import logging
 import time
-import numpy as np
 import torch
 
 from lerobot.common.robots.lekiwi import LeKiwiClient, LeKiwiClientConfig

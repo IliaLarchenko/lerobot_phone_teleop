@@ -13,7 +13,6 @@ import cv2
 import numpy as np
 import torch
 import websockets
-from websockets import WebSocketClientProtocol
 
 from lerobot.common.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from lerobot.common.teleoperators.teleoperator import Teleoperator
