@@ -17,51 +17,23 @@ class ConnectionWidget extends StatelessWidget {
       builder: (context, connectionSnapshot) {
         final isConnected = connectionSnapshot.data ?? false;
 
+        // Only show when NOT connected to save space
+        if (isConnected) {
+          return const SizedBox.shrink(); // Hide when connected
+        }
+
         return Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isConnected ? Colors.green.shade50 : Colors.blue.shade50,
+            color: Colors.blue.shade50.withOpacity(0.1),
             border: Border.all(
-              color: isConnected ? Colors.green.shade300 : Colors.blue.shade300,
+              color: Colors.blue.shade300.withOpacity(0.3),
             ),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: isConnected
-              ? _buildConnectedWidget()
-              : _buildListeningWidget(),
+          child: _buildListeningWidget(),
         );
       },
-    );
-  }
-
-  Widget _buildConnectedWidget() {
-    return Row(
-      children: [
-        Icon(Icons.wifi_tethering, color: Colors.green.shade600),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Robot Connected',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: Colors.green.shade800,
-                ),
-              ),
-              Text(
-                'Ready to receive commands.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.green.shade700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -71,41 +43,52 @@ class ConnectionWidget extends StatelessWidget {
       builder: (context, ipSnapshot) {
         final ipAddress = ipSnapshot.data;
         if (ipAddress == null) {
-          return const Row(
+          return Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Initializing server...'),
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade300),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Initializing server...',
+                style: TextStyle(color: Colors.blue.shade300, fontSize: 14),
+              ),
             ],
           );
         }
 
         return Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.radar, color: Colors.blue.shade600),
+            Icon(Icons.radar, color: Colors.blue.shade300, size: 20),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Listening for Robot...',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.blue.shade800,
-                    ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Waiting for Robot...',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.blue.shade300,
                   ),
-                  Text(
-                    'Connect Python to: ws://$ipAddress:8080',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      color: Colors.blue.shade700,
-                    ),
+                ),
+                Text(
+                  'ws://$ipAddress:8080',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    color: Colors.blue.shade200,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         );

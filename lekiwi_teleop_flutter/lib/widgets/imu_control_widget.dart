@@ -12,40 +12,27 @@ class IMUControlWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: useIMU ? Colors.blue.shade400 : Colors.grey.shade700, width: 2),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.screen_rotation, color: useIMU ? Colors.blue.shade300 : Colors.white),
-              const SizedBox(width: 8),
-              const Text(
-                'IMU Control',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Switch(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.screen_rotation,
+          color: useIMU ? Colors.blue.shade300 : Colors.grey.shade400,
+          size: 20,
+        ),
+        const SizedBox(width: 8),
+        Transform.scale(
+          scale: 0.8,
+          child: Switch(
             value: useIMU,
             onChanged: onToggle,
             activeTrackColor: Colors.blue.shade700,
             activeColor: Colors.blue.shade300,
+            inactiveTrackColor: Colors.grey.shade600,
+            inactiveThumbColor: Colors.grey.shade400,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 } 

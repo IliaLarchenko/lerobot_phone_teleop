@@ -6,6 +6,7 @@ import '../widgets/connection_widget.dart';
 import '../widgets/joystick_widget.dart';
 import '../widgets/video_display_widget.dart';
 import '../widgets/imu_control_widget.dart';
+import '../widgets/theta_control_widget.dart';
 
 class TeleopScreen extends StatefulWidget {
   const TeleopScreen({super.key});
@@ -57,11 +58,61 @@ class _TeleopScreenState extends State<TeleopScreen> {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
+              child: Stack(
                 children: [
-                  ConnectionWidget(webSocketService: _webSocketService),
-                  const Spacer(), // Pushes controls to the bottom
-                  _buildControlOverlay(),
+                  // Top bar with connection status (when not connected)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: ConnectionWidget(webSocketService: _webSocketService),
+                  ),
+
+                  // Top middle - Robot State
+                  Positioned(
+                    top: 16,
+                    left: 100,
+                    right: 100,
+                    child: _buildStateDisplay(),
+                  ),
+
+                  // Top right - IMU Control
+                  Positioned(
+                    top: 16,
+                    right: 0,
+                    child: IMUControlWidget(
+                      useIMU: _useIMU,
+                      onToggle: (value) => setState(() => _useIMU = value),
+                    ),
+                  ),
+
+                  // Bottom left - Joystick
+                  Positioned(
+                    bottom: 16,
+                    left: 0,
+                    child: SizedBox(
+                      width: 200,
+                      height: 200,
+                      child: JoystickWidget(
+                        onMove: (x, y) {
+                          if (!_useIMU) {
+                            _webSocketService.sendJoystickInput(x, y);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+
+                  // Bottom right - Theta Control
+                  Positioned(
+                    bottom: 80,
+                    right: 0,
+                    child: ThetaControlWidget(
+                      onRotationChange: (theta) {
+                        _webSocketService.sendRotationInput(theta);
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -92,77 +143,21 @@ class _TeleopScreenState extends State<TeleopScreen> {
     );
   }
 
-  Widget _buildControlOverlay() {
-    return SizedBox(
-      height: 220, // Define a fixed height for the control area
-      child: Row(
-        children: [
-          // Joystick
-          Expanded(
-            flex: 2,
-            child: JoystickWidget(
-              onMove: (x, y) {
-                if (!_useIMU) {
-                  _webSocketService.sendJoystickInput(x, y);
-                }
-              },
-            ),
-          ),
-          const SizedBox(width: 24),
-          // Side panel
-          Expanded(
-            flex: 1,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // IMU Control
-                IMUControlWidget(
-                  useIMU: _useIMU,
-                  onToggle: (value) => setState(() => _useIMU = value),
-                ),
-                // State display
-                _buildStateDisplay(),
-                // Emergency Stop
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => _webSocketService.sendEmergencyStop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red[700]?.withOpacity(0.9),
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                    ),
-                    child: const Text(
-                      'STOP', 
-                      style: TextStyle(
-                        color: Colors.white, 
-                        fontWeight: FontWeight.bold, 
-                        fontSize: 18
-                      )
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildStateDisplay() {
     final data = _latestObservationData?['data'] as Map<String, dynamic>?;
     final stateData = data?['observation.state'] as Map<String, dynamic>?;
     
     if (stateData == null || stateData['type'] != 'state') {
       return Container(
-        padding: EdgeInsets.all(8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.grey[800],
+          color: Colors.grey[800]?.withOpacity(0.8),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           'No robot state',
-          style: TextStyle(color: Colors.grey, fontSize: 12),
+          style: TextStyle(color: Colors.grey, fontSize: 11),
+          textAlign: TextAlign.center,
         ),
       );
     }
@@ -170,31 +165,35 @@ class _TeleopScreenState extends State<TeleopScreen> {
     final List<dynamic> stateVector = stateData['data'] as List<dynamic>;
     
     return Container(
-      padding: EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.blue[900]?.withOpacity(0.3),
+        color: Colors.blue[900]?.withOpacity(0.7),
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade600.withOpacity(0.3)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Robot State',
+            'ROBOT STATE',
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
-              fontSize: 12,
+              fontSize: 11,
             ),
+            textAlign: TextAlign.center,
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
-            'Arm: ${stateVector.take(6).map((v) => v.toStringAsFixed(2)).join(", ")}',
-            style: TextStyle(color: Colors.grey[300], fontSize: 10),
+            'Arm: ${stateVector.take(6).map((v) => v.toStringAsFixed(1)).join(", ")}',
+            style: TextStyle(color: Colors.grey[300], fontSize: 9),
+            textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
           ),
           Text(
             'Base: ${stateVector.skip(6).take(3).map((v) => v.toStringAsFixed(2)).join(", ")}',
-            style: TextStyle(color: Colors.grey[300], fontSize: 10),
+            style: TextStyle(color: Colors.grey[300], fontSize: 9),
+            textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
           ),
         ],

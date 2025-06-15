@@ -84,18 +84,34 @@ class WebSocketService {
     // y controls forward/backward (x.vel), x controls left/right (y.vel)
     _xVel = y * 0.3; // Forward/backward, max 0.3 m/s
     _yVel = -x * 0.3; // Left/right, max 0.3 m/s (inverted for intuitive control)
-    _thetaVel = 0.0; // No rotation from joystick for now
+    // Don't reset _thetaVel here - keep rotation independent
     
     _sendActionMessage();
   }
 
-  // Send rotation command (from IMU or other input)
+  // Send rotation command (from theta controller or IMU)
   void sendRotationInput(double theta) {
-    _thetaVel = theta * 0.5; // Max 0.5 rad/s
+    _thetaVel = theta; // Already limited in the widget
     _sendActionMessage();
   }
 
-  // Emergency stop
+  // Update specific velocity component
+  void updateXVel(double xVel) {
+    _xVel = xVel;
+    _sendActionMessage();
+  }
+
+  void updateYVel(double yVel) {
+    _yVel = yVel;
+    _sendActionMessage();
+  }
+
+  void updateThetaVel(double thetaVel) {
+    _thetaVel = thetaVel;
+    _sendActionMessage();
+  }
+
+  // Emergency stop - reset all velocities
   void sendEmergencyStop() {
     _xVel = 0.0;
     _yVel = 0.0;
