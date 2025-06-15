@@ -45,7 +45,7 @@ cp -r /path/to/this/project/python_teleop/phone_teleop lerobot/common/teleoperat
 - Android Studio or VS Code with Flutter extension
 - Android device (API 24+) or iOS device (iOS 12+)
 - Enable Developer Options and USB Debugging on your android phone
-- I have no idea how to run Flutter app on iOS but it should be possible too.
+- I have no idea how to run Flutter app on iOS but it should be possible
 
 **Install and run:**
 
@@ -57,6 +57,11 @@ flutter pub get
 
 # Connect your phone via USB (enable Developer Options & USB Debugging)
 flutter devices
+```
+
+Most of the python dependencies are already installed in the LeRobot library. The only one that can be missing is `websockets`. You can install it with:
+```bash
+pip install websockets
 ```
 
 ## Usage
