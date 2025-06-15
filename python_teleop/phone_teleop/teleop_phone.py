@@ -1,19 +1,5 @@
 #!/usr/bin/env python
 
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import asyncio
 import base64
 import json
@@ -71,9 +57,10 @@ class PhoneTeleop(Teleoperator):
         
         # Current action state (velocity commands from phone)
         self.current_action = {
-            "x.vel": 0.0,      # Linear velocity X (forward/backward) 
-            "y.vel": 0.0,      # Linear velocity Y (left/right)
-            "theta.vel": 0.0,  # Angular velocity (rotation)
+            "x.vel": 0.0,           # Linear velocity X (forward/backward) 
+            "y.vel": 0.0,           # Linear velocity Y (left/right)
+            "theta.vel": 0.0,       # Angular velocity (rotation)
+            "wrist_flex.vel": 0.0,  # Wrist flex velocity
         }
         
         # Connection state
@@ -88,6 +75,7 @@ class PhoneTeleop(Teleoperator):
             "x.vel": float,
             "y.vel": float, 
             "theta.vel": float,
+            "wrist_flex.vel": float,
         }
 
     @property
@@ -184,6 +172,7 @@ class PhoneTeleop(Teleoperator):
                 x_vel = data.get("x.vel", 0.0)
                 y_vel = data.get("y.vel", 0.0)  
                 theta_vel = data.get("theta.vel", 0.0)
+                wrist_flex_vel = data.get("wrist_flex.vel", 0.0)
                 
                 # Apply velocity limits
                 x_vel = max(-self.config.max_linear_velocity, 
@@ -192,12 +181,14 @@ class PhoneTeleop(Teleoperator):
                            min(self.config.max_linear_velocity, y_vel))
                 theta_vel = max(-self.config.max_angular_velocity,
                                min(self.config.max_angular_velocity, theta_vel))
+                # Wrist flex velocity doesn't need limiting - it's controlled by the app
                 
                 # Update current action
                 self.current_action = {
                     "x.vel": x_vel,
                     "y.vel": y_vel,
                     "theta.vel": theta_vel,
+                    "wrist_flex.vel": wrist_flex_vel,
                 }
                 
                 # Put action in queue for main thread
@@ -268,6 +259,9 @@ class PhoneTeleop(Teleoperator):
                     # Handle torch tensors (convert to numpy first)
                     value_np = value.numpy()
                     if value_np.ndim == 3:  # Camera image
+                        # Convert RGB to BGR since torch tensors are usually RGB but cv2.imencode expects BGR
+                        if value_np.shape[2] == 3:  # Only if it has 3 channels
+                            value_np = cv2.cvtColor(value_np, cv2.COLOR_RGB2BGR)
                         # Convert to JPEG and encode as base64
                         _, buffer = cv2.imencode('.jpg', value_np, 
                                               [cv2.IMWRITE_JPEG_QUALITY, self.config.video_quality])
@@ -288,6 +282,9 @@ class PhoneTeleop(Teleoperator):
                         }
                 elif isinstance(value, np.ndarray):
                     if value.ndim == 3:  # Camera image
+                        # If numpy array is RGB, convert to BGR for cv2.imencode
+                        if value.shape[2] == 3:  # Only if it has 3 channels
+                            value = cv2.cvtColor(value, cv2.COLOR_RGB2BGR)
                         # Convert to JPEG and encode as base64
                         _, buffer = cv2.imencode('.jpg', value, 
                                               [cv2.IMWRITE_JPEG_QUALITY, self.config.video_quality])

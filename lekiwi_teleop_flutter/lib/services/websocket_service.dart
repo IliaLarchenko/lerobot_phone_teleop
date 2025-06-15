@@ -27,6 +27,15 @@ class WebSocketService {
   double _xVel = 0.0;
   double _yVel = 0.0;
   double _thetaVel = 0.0;
+  double _wristFlexVel = 0.0;
+
+  // Manipulator joint velocities (6 joints)
+  List<double> _manipulatorJointVel = List.filled(6, 0.0);
+
+  // Speed limits
+  static const double maxLinearVel = 0.25;
+  static const double maxRotationVel = 60.0;
+  static const double maxWristFlexVel = 1.0;
 
   Future<void> startServer() async {
     if (_server != null) {
@@ -78,21 +87,59 @@ class WebSocketService {
     }
   }
 
+  // Apply deadzone logic: 0-15% = 0, 15-30% = proportional 0-30%, 30%+ = actual
+  double _applyDeadzone(double value) {
+    final absValue = value.abs();
+    if (absValue < 0.15) {
+      return 0.0;
+    } else if (absValue < 0.30) {
+      // Scale from 0.15-0.30 range to 0.0-0.30 range
+      final scaledValue = (absValue - 0.15) / 0.15 * 0.30;
+      return value > 0 ? scaledValue : -scaledValue;
+    } else {
+      return value;
+    }
+  }
+
   // Send velocity commands to Python (from joystick input)
   void sendJoystickInput(double x, double y) {
+    // Apply deadzone first
+    final deadzoneX = _applyDeadzone(x);
+    final deadzoneY = _applyDeadzone(y);
+    
     // Convert joystick input (-1 to 1) to velocity commands
     // y controls forward/backward (x.vel), x controls left/right (y.vel)
-    _xVel = y * 0.3; // Forward/backward, max 0.3 m/s
-    _yVel = -x * 0.3; // Left/right, max 0.3 m/s (inverted for intuitive control)
+    _xVel = deadzoneY * maxLinearVel; // Forward/backward
+    _yVel = -deadzoneX * maxLinearVel; // Left/right (inverted for intuitive control)
     // Don't reset _thetaVel here - keep rotation independent
     
     _sendActionMessage();
   }
 
-  // Send rotation command (from theta controller or IMU)
-  void sendRotationInput(double theta) {
-    _thetaVel = theta; // Already limited in the widget
+  // Send rotation and wrist flex commands (from right joystick)
+  void sendArmRotationInput(double rotation, double wristFlex) {
+    // Apply deadzone first
+    final deadzoneRotation = _applyDeadzone(rotation);
+    final deadzoneWristFlex = _applyDeadzone(wristFlex);
+    
+    // Fix inversion issues: negate both rotation and wrist flex
+    _thetaVel = -deadzoneRotation * maxRotationVel; // Fix rotation inversion
+    _wristFlexVel = -deadzoneWristFlex * maxWristFlexVel; // Fix wrist flex inversion
     _sendActionMessage();
+  }
+
+  // Send rotation command (from IMU)
+  void sendRotationInput(double theta) {
+    _thetaVel = theta * maxRotationVel;
+    _sendActionMessage();
+  }
+
+  // Send manipulator joint input (for manipulator mode)
+  void sendManipulatorJointInput(int jointIndex, double value) {
+    if (jointIndex >= 0 && jointIndex < 6) {
+      _manipulatorJointVel[jointIndex] = value; // Max speed is 1 as specified
+      _sendManipulatorActionMessage();
+    }
   }
 
   // Update specific velocity component
@@ -111,11 +158,18 @@ class WebSocketService {
     _sendActionMessage();
   }
 
+  void updateWristFlexVel(double wristFlexVel) {
+    _wristFlexVel = wristFlexVel;
+    _sendActionMessage();
+  }
+
   // Emergency stop - reset all velocities
   void sendEmergencyStop() {
     _xVel = 0.0;
     _yVel = 0.0;
     _thetaVel = 0.0;
+    _wristFlexVel = 0.0;
+    _manipulatorJointVel.fillRange(0, 6, 0.0);
     _sendActionMessage();
   }
 
@@ -124,6 +178,22 @@ class WebSocketService {
     
     final message = {
       'type': 'action',
+      'x.vel': _xVel,
+      'y.vel': _yVel,
+      'theta.vel': _thetaVel,
+      'wrist_flex.vel': _wristFlexVel,
+    };
+    
+    _sendMessage(message);
+  }
+
+  void _sendManipulatorActionMessage() {
+    if (!isConnected) return;
+    
+    final message = {
+      'type': 'manipulator_action',
+      'joint_velocities': _manipulatorJointVel,
+      // Keep base commands the same in manipulator mode
       'x.vel': _xVel,
       'y.vel': _yVel,
       'theta.vel': _thetaVel,

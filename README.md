@@ -1,157 +1,241 @@
-# LeKiwi Phone Teleoperation System
+# LeRobot Phone Teleoperation System
 
-This project provides a complete teleoperation system for the LeKiwi mobile manipulator robot using a Flutter mobile app. The system consists of two main components:
-
-1. **Python Teleoperator** - A server-side component that integrates with the lerobot library
-2. **Flutter Mobile App** - A cross-platform mobile application for controlling the robot
+A complete mobile teleoperation system for LeKiwi robots using Flutter, providing intuitive dual-joystick control with real-time video streaming.
 
 ## Overview
 
-The system allows you to control the LeKiwi robot remotely using your phone with the following features:
+This system enables remote control of LeKiwi mobile manipulator robots through a Flutter mobile app with advanced control features:
 
-- **Virtual Joystick Control** - Touch-based joystick for precise movement control
-- **IMU Sensor Control** - Use phone's motion sensors for intuitive robot control
-- **Live Video Streaming** - View real-time camera feeds from the robot (up to 2 cameras)
-- **Emergency Stop** - Immediate stop functionality for safety
-- **WebSocket Communication** - Real-time, low-latency communication between phone and robot
-- **Cross-Platform** - Works on both Android and iOS
+- **Dual-Mode Control**: Base movement + arm control, or full manipulator joint control
+- **Real-Time Video Streaming**: Live camera feeds from robot (front + wrist cameras)
+- **Advanced Joystick Control**: Deadzone logic, smooth movement, precision control
+- **WebSocket Communication**: Low-latency bidirectional communication
+- **Cross-Platform**: Single Flutter app for Android and iOS
 
-## System Architecture
+## Architecture
 
 ```
-Flutter App <---> Python Teleoperator <---> LeKiwi Robot
-  (WiFi)           (WebSocket Server)        (lerobot)
+Phone (Flutter App)     Python Client         LeKiwi Robot
+    [Server]      <-->     [Client]      <-->    [lerobot]
+   WebSocket               WebSocket              Robot API
+  192.168.1.x:8080        Auto-connect          Local/Remote
 ```
 
-## Quick Start
+**Key Design**: The phone acts as WebSocket server, Python connects as client. This allows the phone to maintain control and automatically handle reconnections.
 
-### 1. Set up Python Teleoperator
+## Installation
+
+### 1. Move Python Code to LeRobot Library
+
+The Python teleoperator should be integrated into your lerobot installation:
 
 ```bash
-./setup.sh
+# Navigate to your lerobot installation
+cd /path/to/lerobot
+
+# Copy the phone teleoperator to lerobot teleoperators directory
+cp -r /path/to/this/project/python_teleop/phone_teleop lerobot/common/teleoperators/
+
+# The structure should be:
+# lerobot/common/teleoperators/phone_teleop/
+# ├── __init__.py
+# ├── configuration_phone.py
+# └── teleop_phone.py
 ```
 
-Or manually:
-```bash
-cd python_teleop
-pip install -r requirements.txt
-python example_phone_teleoperation.py
-```
-
-### 2. Build and Install Flutter App
+### 2. Install Flutter App on Phone
 
 **Prerequisites:**
-- Install Flutter: `brew install flutter`
-- Install VS Code with Flutter extension
+- Flutter SDK 3.16+ installed
+- Android Studio or VS Code with Flutter extension
+- Android device (API 24+) or iOS device (iOS 12+)
 
-**Build and run:**
+**Install and run:**
 ```bash
 cd lekiwi_teleop_flutter
-flutter devices          # List connected devices
-flutter run               # Build and run on connected device
+
+# Get dependencies
+flutter pub get
+
+# Connect your phone via USB (enable Developer Options & USB Debugging)
+flutter devices
+
+# Install and run on your phone
+flutter run
 ```
 
 **For VS Code users:**
 1. Open `lekiwi_teleop_flutter` folder in VS Code
-2. Press `F5` or use "Run → Start Debugging"
-3. Select your device when prompted
+2. Connect phone via USB
+3. Press `F5` and select your device
+
+## Usage
+
+### 1. Start Phone App
+
+1. Launch the Flutter app on your phone
+2. App automatically starts WebSocket server on port 8080
+3. Note the IP address displayed (e.g., `ws://192.168.1.102:8080`)
+
+### 2. Create Robot Control Script
+
+Create a Python script in your lerobot project:
+
+```python
+from lerobot.common.robots.lekiwi import LeKiwiClient, LeKiwiClientConfig
+from lerobot.common.teleoperators.phone_teleop.configuration_phone import PhoneTeleopConfig
+from lerobot.common.teleoperators.phone_teleop.teleop_phone import PhoneTeleop
+
+# Robot configuration
+robot_config = LeKiwiClientConfig(
+    remote_ip="robotpi.local", 
+    id="my_robot"
+)
+
+# Phone teleoperator configuration
+phone_config = PhoneTeleopConfig(
+    phone_ip="192.168.1.102",  # Your phone's IP from step 1
+    phone_port=8080,
+    max_linear_velocity=0.25,
+    max_angular_velocity=60.0,
+)
+
+# Create and connect
+robot = LeKiwiClient(robot_config)
+phone_teleop = PhoneTeleop(phone_config)
+
+robot.connect()
+phone_teleop.connect()
+
+# Control loop
+while True:
+    observation = robot.get_observation()
+    phone_teleop.send_feedback(observation)  # Send robot data to phone
+    
+    action = phone_teleop.get_action()       # Get commands from phone
+    robot.send_action(action)                # Control robot
+```
+
+### 3. Control the Robot
+
+The app provides two control modes:
+
+#### Base Control Mode (Default)
+- **Left Joystick**: Base movement (forward/back, left/right)
+- **Right Joystick**: Rotation + wrist flex control
+- Sends: `x.vel`, `y.vel`, `theta.vel`, `wrist_flex.vel`
+
+#### Manipulator Mode (Toggle "MAN" Switch)
+- **6 Horizontal Joysticks**: Individual joint control
+  - Left side: Shoulder Pan, Shoulder Lift, Elbow Flex
+  - Right side: Wrist Flex, Wrist Roll, Gripper
+- Each joystick controls one joint with max velocity ±1
+- Base movement commands remain available
 
 ## Features
 
-### Robot Control
-- **Base Movement**: Forward/backward, left/right, rotation
-- **Velocity Control**: Adjustable maximum velocities
-- **Dual Control Modes**: Switch between joystick and IMU control
-- **Emergency Stop**: Immediate safety stop
+### Advanced Control
+- **Deadzone Logic**: 0-15% input = 0 output, smooth scaling 15-30%
+- **Fixed Number Display**: Consistent formatting prevents UI jumping
+- **Dual Joystick Control**: Independent base movement and arm control
+- **Mode Switching**: Easy toggle between base and manipulator control
 
-### Video Streaming
-- **Real-time Video**: JPEG-compressed video streams
-- **Dual Camera Support**: Side-by-side camera feeds
-- **Adjustable Quality**: Configurable video quality and frame rate
+### Real-Time Feedback
+- **Live Video Streams**: Front and wrist camera feeds with adjustable quality
+- **Robot State Display**: Real-time joint positions and base velocities
+- **Connection Status**: Visual indicators for robot connection state
 
-### Modern Flutter UI
-- **Dark Theme**: Optimized for robot teleoperation
-- **Landscape Mode**: Fullscreen experience
-- **Responsive Design**: Adapts to different screen sizes
-- **Hot Reload**: Instant development feedback
+### Robust Communication
+- **Automatic Reconnection**: Python client reconnects if connection drops
+- **Low Latency**: WebSocket protocol for real-time control
+- **Error Handling**: Graceful handling of network issues
+
+## Configuration
+
+### Phone App Configuration
+```dart
+// Automatically configured:
+phone_ip: "192.168.1.102"  // Your phone's WiFi IP
+phone_port: 8080           // WebSocket server port
+video_quality: 80          // JPEG compression quality
+```
+
+### Python Configuration
+```python
+PhoneTeleopConfig(
+    phone_ip="192.168.1.102",      # Phone's IP address
+    phone_port=8080,               # Must match phone app
+    connection_timeout_s=10.0,     # Connection timeout
+    video_quality=80,              # Video compression
+    max_linear_velocity=0.25,      # m/s limit
+    max_angular_velocity=60.0,     # deg/s limit
+)
+```
+
+## Message Protocol
+
+### Phone → Python (Actions)
+```json
+{
+  "type": "action",
+  "x.vel": 0.1,
+  "y.vel": 0.0,
+  "theta.vel": 15.0,
+  "wrist_flex.vel": 0.5
+}
+```
+
+### Python → Phone (Observations)
+```json
+{
+  "type": "observation",
+  "data": {
+    "observation.state": {"type": "state", "data": [0.1, 0.2, ...]},
+    "observation.images.front": {"type": "image", "data": "base64..."},
+    "observation.images.wrist": {"type": "image", "data": "base64..."}
+  }
+}
+```
 
 ## Directory Structure
 
 ```
 lerobot_phone_teleop/
-├── python_teleop/           # Python server component
-│   ├── phone_teleop/        # Phone teleoperator package
-│   ├── example_phone_teleoperation.py
-│   └── requirements.txt
-├── lekiwi_teleop_flutter/   # Flutter mobile application
-│   ├── lib/
-│   │   ├── main.dart        # App entry point
-│   │   ├── screens/         # UI screens
-│   │   ├── widgets/         # UI components
-│   │   └── services/        # Business logic
-│   └── pubspec.yaml         # Flutter dependencies
-├── setup.sh                 # Quick setup script
-└── README.md
+├── README.md
+├── python_teleop/                    # Move to lerobot/common/teleoperators/
+│   └── phone_teleop/
+│       ├── __init__.py
+│       ├── configuration_phone.py
+│       └── teleop_phone.py
+└── lekiwi_teleop_flutter/            # Flutter mobile app
+    ├── lib/
+    │   ├── main.dart
+    │   ├── screens/teleop_screen.dart
+    │   ├── widgets/
+    │   │   ├── joystick_widget.dart
+    │   │   ├── arm_rotation_joystick_widget.dart
+    │   │   ├── manipulator_joysticks_widget.dart
+    │   │   └── video_display_widget.dart
+    │   └── services/websocket_service.dart
+    └── pubspec.yaml
 ```
 
-## Requirements
+## Technical Details
 
-### Python Side
-- Python 3.8+
-- lerobot library
-- websockets, opencv-python, numpy, torch, rerun-sdk
+### Joystick Control Logic
+- **Deadzone**: 15% prevents drift, 15-30% smooth ramp-up
+- **Coordinate System**: Standard robot conventions (x=forward, y=left, θ=CCW)
+- **Update Rate**: 20Hz for smooth control
 
-### Flutter Side
-- Flutter 3.16+
-- Android 7.0+ (API 24) or iOS 12+
-- WiFi connection to same network as Python server
+### Video Streaming
+- **Format**: JPEG compression with configurable quality
+- **Color Space**: RGB→BGR conversion for proper display
+- **Performance**: Optimized for mobile networks
 
-## Configuration
-
-### Python Configuration
-Edit the phone teleoperator configuration in your script:
-
-```python
-phone_config = PhoneTeleopConfig(
-    server_host="0.0.0.0",          # Listen on all interfaces
-    server_port=8080,               # WebSocket port
-    max_linear_velocity=0.5,        # m/s
-    max_angular_velocity=1.0,       # rad/s
-    video_quality=80,               # JPEG quality (0-100)
-    video_fps=30                    # Video frame rate
-)
-```
-
-### Flutter Configuration
-The app allows you to:
-- Enter server IP address (automatically saved)
-- Switch between joystick and IMU control modes
-- View connection status and video feeds in real-time
-
-## Usage
-
-1. **Start the Python server** on your laptop connected to the robot
-2. **Run the Flutter app** on your phone:
-   ```bash
-   cd lekiwi_teleop_flutter
-   flutter run
-   ```
-3. **Enter the server IP address** (your laptop's IP on the WiFi network)
-4. **Connect** and start controlling the robot!
-
-### Control Modes
-
-#### Joystick Mode
-- Use the virtual joystick on screen
-- Drag the blue knob to control movement
-- Forward/backward controls robot's forward/backward movement
-- Left/right controls robot's sideways movement
-
-#### IMU Mode
-- Tilt the phone to control the robot
-- Phone orientation directly translates to robot movement
-- Visual orientation indicator shows current tilt angles
-- More intuitive for some users
+### Connection Management
+- **Server Discovery**: Phone displays connection URL
+- **Reconnection**: Automatic retry with exponential backoff
+- **Timeout Handling**: Graceful degradation on network issues
 
 ## Development
 
@@ -160,92 +244,57 @@ The app allows you to:
 # Hot reload during development
 flutter run
 
-# Build for release
-flutter build apk          # Android
-flutter build ios          # iOS
+# Build release APK
+flutter build apk
 
 # Run tests
 flutter test
 ```
 
-### VS Code Integration
-1. Install Flutter and Dart extensions
-2. Open project folder in VS Code
-3. Use `F5` for debugging with hot reload
-4. Full IntelliSense and debugging support
+### Python Integration
+```python
+# Import in your lerobot scripts
+from lerobot.common.teleoperators.phone_teleop import PhoneTeleop, PhoneTeleopConfig
 
-### Extending the Python Teleoperator
-The `PhoneTeleop` class follows the same pattern as other lerobot teleoperators. You can extend it to:
-- Add more control commands
-- Implement haptic feedback
-- Add more sensor data processing
-
-### Extending the Flutter App
-The Flutter app is built with clean architecture:
-- `screens/` - UI screens and layouts
-- `widgets/` - Reusable UI components
-- `services/` - Business logic and communication
-- Easy to add new features and maintain
+# Use like any other teleoperator
+teleop = PhoneTeleop(config)
+teleop.connect()
+action = teleop.get_action()
+```
 
 ## Troubleshooting
 
 ### Connection Issues
-- Ensure both devices are on the same WiFi network
-- Check if firewall is blocking port 8080
-- Verify the IP address is correct
-- Check Flutter app logs: `flutter logs`
+1. **Check WiFi**: Ensure phone and computer on same network
+2. **IP Address**: Verify phone IP in app matches Python config
+3. **Firewall**: Allow port 8080 on both devices
+4. **Router**: Some routers block device-to-device communication
 
-### Video Not Showing
-- Check robot camera connections
-- Verify video encoding in robot observation data
-- Monitor Python server logs for errors
+### Control Issues
+1. **Deadzone Too High**: Reduce from 15% if needed
+2. **Inverted Controls**: Check coordinate system configuration
+3. **Lag**: Reduce video quality or check network performance
 
-### Performance Issues
-- Reduce video quality or frame rate
-- Check WiFi signal strength
-- Close other network-intensive applications
-- Use `flutter run --release` for better performance
+### Video Issues
+1. **No Image**: Check robot camera connections
+2. **Poor Quality**: Increase video_quality setting
+3. **Color Issues**: Verify RGB/BGR conversion
 
-### Flutter Issues
-```bash
-# Clean and rebuild
-flutter clean
-flutter pub get
-flutter run
+## Capabilities Summary
 
-# Check Flutter installation
-flutter doctor
-```
-
-## Advantages of Flutter
-
-✅ **Cross-Platform**: Single codebase for Android and iOS
-✅ **Hot Reload**: Instant feedback during development
-✅ **VS Code Integration**: Excellent development experience
-✅ **Modern UI**: Beautiful, responsive interface
-✅ **Performance**: Native performance on both platforms
-✅ **Easy Deployment**: Simple build and distribution
+✅ **Dual Joystick Control**: Independent base movement and arm control  
+✅ **Manipulator Mode**: Individual joint velocity control  
+✅ **Real-Time Video**: Dual camera feeds with compression  
+✅ **Advanced Input**: Deadzone logic and smooth scaling  
+✅ **Robust Networking**: Auto-reconnection and error handling  
+✅ **Mobile Optimized**: Flutter UI designed for touchscreen control  
+✅ **LeRobot Integration**: Standard teleoperator interface  
+✅ **Cross-Platform**: Android and iOS support  
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly with `flutter test`
-5. Submit a pull request
-
-## Support
-
-For issues and questions:
-1. Check the troubleshooting section above
-2. Review the Flutter documentation
-3. Check the lerobot documentation
-4. Open an issue on the repository
+Licensed under the Apache License 2.0.
 
 ---
 
-**Note**: This implementation focuses on base robot control using Flutter for modern mobile development. You can extend it to include manipulator control, additional sensors, and more advanced features as needed. 
+**Note**: This system is designed for research and development use with LeKiwi robots. Ensure proper safety measures when operating real hardware. 

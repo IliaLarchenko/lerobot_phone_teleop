@@ -1,28 +1,14 @@
 #!/usr/bin/env python
 
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """
 Phone teleoperator example with real LeKiwi robot.
 
 This example:
 1. Connects to LeKiwi robot to get real observations
-2. Connects to phone for base velocity control
+2. Connects to phone for base velocity control and wrist flex control
 3. Sends robot observations to phone (state vector + camera feeds)
-4. Receives base velocity commands from phone
-5. Combines phone base control with fixed arm positions
+4. Receives base velocity commands and wrist flex velocity from phone
+5. Combines phone control with fixed arm positions (except wrist flex)
 """
 
 import logging
@@ -49,13 +35,17 @@ def main():
         phone_ip="192.168.1.102",  # Change this to your phone's IP
         phone_port=8080,
         video_quality=70,  # Lower quality for faster streaming
-        max_linear_velocity=0.2,
-        max_angular_velocity=0.3,
+        max_linear_velocity=0.25,  # Updated to match app settings
+        max_angular_velocity=60.0, # Updated to match app settings  
     )
     
     # Create robot and phone teleoperator
     robot = LeKiwiClient(robot_config)
     phone_teleop = PhoneTeleop(phone_config)
+    
+    # Wrist flex position tracking
+    current_wrist_flex_pos = -50.0  # Starting position (from your fixed arm action)
+    last_time = time.time()
     
     try:
         # Connect to robot and phone
@@ -67,21 +57,24 @@ def main():
         phone_teleop.connect()
         logger.info("Phone connected!")
         
-        # Fixed arm positions (safe home position)
-        # You can modify these or get them from another teleoperator
-        fixed_arm_action = {
+        # Fixed arm positions (safe home position) - wrist flex will be controlled by phone
+        base_arm_action = {
             "arm_shoulder_pan.pos": 0,
             "arm_shoulder_lift.pos": -90, 
             "arm_elbow_flex.pos": 90,
-            "arm_wrist_flex.pos": -50,
             "arm_wrist_roll.pos": -50,
             "arm_gripper.pos": 50.0,  # Half open
         }
         
         logger.info("Starting teleoperation loop...")
+        logger.info("Phone controls: Left joystick = base movement, Right joystick = rotation + wrist flex")
         
         # Main control loop
         while True:
+            current_time = time.time()
+            dt = current_time - last_time
+            last_time = current_time
+            
             # Get real robot observation
             observation = robot.get_observation()
             
@@ -97,7 +90,7 @@ def main():
             # Send observation to phone
             phone_teleop.send_feedback(processed_observation)
             
-            # Get base velocity commands from phone
+            # Get commands from phone
             phone_action = phone_teleop.get_action()
             
             # Create base action from phone velocities
@@ -107,16 +100,32 @@ def main():
                 "theta.vel": phone_action["theta.vel"],
             }
             
-            # Combine fixed arm positions with phone base control
-            full_action = {**fixed_arm_action, **base_action}
+            # Handle wrist flex velocity - integrate to position
+            wrist_flex_vel = phone_action["wrist_flex.vel"]
+            if abs(wrist_flex_vel) > 0.01:  # Only update if significant velocity
+                # Integrate velocity to position
+                current_wrist_flex_pos += wrist_flex_vel * dt * 60  # Scale factor for reasonable movement
+                # Clamp to reasonable wrist flex limits
+                current_wrist_flex_pos = max(-90, min(90, current_wrist_flex_pos))
+            
+            # Create full arm action with controlled wrist flex
+            arm_action = {
+                **base_arm_action,
+                "arm_wrist_flex.pos": current_wrist_flex_pos,
+            }
+            
+            # Combine arm and base actions
+            full_action = {**arm_action, **base_action}
             
             # Send combined action to robot
             robot.send_action(full_action)
             
             # Log the received action
-            if any(abs(v) > 0.01 for v in base_action.values()):
-                logger.info(f"Phone control: x.vel={base_action['x.vel']:.2f}, "
-                           f"y.vel={base_action['y.vel']:.2f}, theta.vel={base_action['theta.vel']:.2f}")
+            if (any(abs(v) > 0.01 for v in base_action.values()) or 
+                abs(wrist_flex_vel) > 0.01):
+                logger.info(f"Phone control: base=({base_action['x.vel']:.2f}, "
+                           f"{base_action['y.vel']:.2f}, {base_action['theta.vel']:.1f}), "
+                           f"wrist_flex={current_wrist_flex_pos:.1f} (vel={wrist_flex_vel:.2f})")
             
             # Small delay to avoid overwhelming the system
             time.sleep(0.05)  # 20 Hz

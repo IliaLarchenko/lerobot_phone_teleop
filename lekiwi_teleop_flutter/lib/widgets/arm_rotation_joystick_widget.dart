@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
-class JoystickWidget extends StatefulWidget {
-  final Function(double x, double y) onMove;
+class ArmRotationJoystickWidget extends StatefulWidget {
+  final Function(double rotation, double wristFlex) onMove;
   final double size;
 
-  const JoystickWidget({
+  const ArmRotationJoystickWidget({
     super.key,
     required this.onMove,
     this.size = 200.0,
   });
 
   @override
-  State<JoystickWidget> createState() => _JoystickWidgetState();
+  State<ArmRotationJoystickWidget> createState() => _ArmRotationJoystickWidgetState();
 }
 
-class _JoystickWidgetState extends State<JoystickWidget> {
+class _ArmRotationJoystickWidgetState extends State<ArmRotationJoystickWidget> {
   double _knobX = 0.0;
   double _knobY = 0.0;
   bool _isDragging = false;
@@ -88,13 +88,14 @@ class _JoystickWidgetState extends State<JoystickWidget> {
 
     // Convert to normalized values (-1 to 1)
     final normalizedX = _knobX / radius;
-    final normalizedY = -_knobY / radius; // Invert Y for intuitive control
+    final normalizedY = _knobY / radius; // No inversion - fix the direction issue
 
     // Apply deadzone logic
     final deadzonedX = _applyDeadzone(normalizedX);
     final deadzonedY = _applyDeadzone(normalizedY);
 
-    widget.onMove(deadzonedX, deadzonedY);
+    // Rotation (left/right) and wrist flex (up/down) - fix inversion
+    widget.onMove(deadzonedX, -deadzonedY); // Invert Y for correct wrist flex direction
   }
 
   // Apply deadzone logic: 0-15% = 0, 15-30% = proportional 0-30%, 30%+ = actual

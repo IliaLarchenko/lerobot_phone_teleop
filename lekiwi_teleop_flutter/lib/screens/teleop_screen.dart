@@ -6,7 +6,8 @@ import '../widgets/connection_widget.dart';
 import '../widgets/joystick_widget.dart';
 import '../widgets/video_display_widget.dart';
 import '../widgets/imu_control_widget.dart';
-import '../widgets/theta_control_widget.dart';
+import '../widgets/arm_rotation_joystick_widget.dart';
+import '../widgets/manipulator_joysticks_widget.dart';
 
 class TeleopScreen extends StatefulWidget {
   const TeleopScreen({super.key});
@@ -20,6 +21,7 @@ class _TeleopScreenState extends State<TeleopScreen> {
   
   // State
   bool _useIMU = false;
+  bool _manipulatorMode = false; // New mode toggle
   Map<String, dynamic>? _latestObservationData;
   StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
 
@@ -68,53 +70,117 @@ class _TeleopScreenState extends State<TeleopScreen> {
                     child: ConnectionWidget(webSocketService: _webSocketService),
                   ),
 
-                  // Top middle - Robot State
+                  // Robot State - very top right corner (slightly higher)
                   Positioned(
-                    top: 16,
-                    left: 100,
-                    right: 100,
-                    child: _buildStateDisplay(),
-                  ),
-
-                  // Top right - IMU Control
-                  Positioned(
-                    top: 16,
+                    top: -4, // Moved slightly higher
                     right: 0,
-                    child: IMUControlWidget(
-                      useIMU: _useIMU,
-                      onToggle: (value) => setState(() => _useIMU = value),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _buildCompactStateDisplay(),
+                        const SizedBox(height: 4),
+                        _buildModeSwitch(),
+                      ],
                     ),
                   ),
 
-                  // Bottom left - Joystick
-                  Positioned(
-                    bottom: 16,
-                    left: 0,
-                    child: SizedBox(
-                      width: 200,
-                      height: 200,
-                      child: JoystickWidget(
-                        onMove: (x, y) {
-                          if (!_useIMU) {
-                            _webSocketService.sendJoystickInput(x, y);
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-
-                  // Bottom right - Theta Control
-                  Positioned(
-                    bottom: 80,
-                    right: 0,
-                    child: ThetaControlWidget(
-                      onRotationChange: (theta) {
-                        _webSocketService.sendRotationInput(theta);
-                      },
-                    ),
-                  ),
+                  // Conditional control layout based on mode
+                  if (!_manipulatorMode) ..._buildBaseControls(),
+                  if (_manipulatorMode) ..._buildManipulatorControls(),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildBaseControls() {
+    return [
+      // Bottom left - Joystick (closer to corner)
+      Positioned(
+        bottom: 4, // Closer to corner
+        left: 4,   // Closer to corner
+        child: JoystickWidget(
+          size: 200,
+          onMove: (x, y) {
+            if (!_useIMU) {
+              _webSocketService.sendJoystickInput(x, y);
+            }
+          },
+        ),
+      ),
+
+      // Bottom right - Arm/Rotation Joystick (closer to corner)
+      Positioned(
+        bottom: 4, // Closer to corner
+        right: 4,  // Closer to corner
+        child: ArmRotationJoystickWidget(
+          size: 200,
+          onMove: (rotation, wristFlex) {
+            _webSocketService.sendArmRotationInput(rotation, wristFlex);
+          },
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildManipulatorControls() {
+    return [
+      // Manipulator joysticks - 3 on left, 3 on right
+      Positioned(
+        bottom: 20,
+        left: 8,
+        child: ManipulatorJoysticksWidget(
+          side: 'left', // Controls joints 0, 1, 2
+          onJointMove: (jointIndex, value) {
+            _webSocketService.sendManipulatorJointInput(jointIndex, value);
+          },
+        ),
+      ),
+      
+      Positioned(
+        bottom: 20,
+        right: 8,
+        child: ManipulatorJoysticksWidget(
+          side: 'right', // Controls joints 3, 4, 5
+          onJointMove: (jointIndex, value) {
+            _webSocketService.sendManipulatorJointInput(jointIndex + 3, value);
+          },
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildModeSwitch() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.grey[200]?.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'MAN',
+            style: TextStyle(
+              color: Colors.grey[800],
+              fontSize: 8,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Transform.scale(
+            scale: 0.6,
+            child: Switch(
+              value: _manipulatorMode,
+              onChanged: (value) => setState(() => _manipulatorMode = value),
+              activeTrackColor: Colors.blue.shade700,
+              activeColor: Colors.blue.shade300,
+              inactiveTrackColor: Colors.grey.shade600,
+              inactiveThumbColor: Colors.grey.shade400,
             ),
           ),
         ],
@@ -143,20 +209,24 @@ class _TeleopScreenState extends State<TeleopScreen> {
     );
   }
 
-  Widget _buildStateDisplay() {
+  Widget _buildCompactStateDisplay() {
     final data = _latestObservationData?['data'] as Map<String, dynamic>?;
     final stateData = data?['observation.state'] as Map<String, dynamic>?;
     
     if (stateData == null || stateData['type'] != 'state') {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.grey[800]?.withOpacity(0.8),
-          borderRadius: BorderRadius.circular(8),
+          color: Colors.grey[200]?.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
-          'No robot state',
-          style: TextStyle(color: Colors.grey, fontSize: 11),
+          'No State',
+          style: TextStyle(
+            color: Colors.grey[800], 
+            fontSize: 9,
+            fontWeight: FontWeight.w500,
+          ),
           textAlign: TextAlign.center,
         ),
       );
@@ -165,40 +235,52 @@ class _TeleopScreenState extends State<TeleopScreen> {
     final List<dynamic> stateVector = stateData['data'] as List<dynamic>;
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.blue[900]?.withOpacity(0.7),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue.shade600.withOpacity(0.3)),
+        color: Colors.grey[200]?.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            'ROBOT STATE',
+            'ARM: ${stateVector.take(6).map((v) => _formatFixed(v, 1)).join(" ")}',
             style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
+              color: Colors.grey[800],
+              fontSize: 8,
+              fontWeight: FontWeight.w500,
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Arm: ${stateVector.take(6).map((v) => v.toStringAsFixed(1)).join(", ")}',
-            style: TextStyle(color: Colors.grey[300], fontSize: 9),
-            textAlign: TextAlign.center,
+            textAlign: TextAlign.right,
             overflow: TextOverflow.ellipsis,
           ),
           Text(
-            'Base: ${stateVector.skip(6).take(3).map((v) => v.toStringAsFixed(2)).join(", ")}',
-            style: TextStyle(color: Colors.grey[300], fontSize: 9),
-            textAlign: TextAlign.center,
+            'BASE: ${stateVector.skip(6).take(3).map((v) => _formatFixed(v, 2)).join(" ")}',
+            style: TextStyle(
+              color: Colors.grey[700],
+              fontSize: 8,
+            ),
+            textAlign: TextAlign.right,
             overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
+  }
+
+  // Fixed-width number formatting to prevent jumping
+  String _formatFixed(dynamic value, int decimals) {
+    if (value is num) {
+      String formatted = value.toStringAsFixed(decimals);
+      // Pad positive numbers with space to match negative numbers width
+      if (value >= 0 && decimals == 1) {
+        return ' $formatted'; // Extra space for 1 decimal
+      } else if (value >= 0 && decimals == 2) {
+        return ' $formatted'; // Extra space for 2 decimals
+      }
+      return formatted;
+    }
+    return value.toString();
   }
 
   @override
