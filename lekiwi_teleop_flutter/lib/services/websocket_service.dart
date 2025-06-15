@@ -138,7 +138,10 @@ class WebSocketService {
   void sendManipulatorJointInput(int jointIndex, double value) {
     if (jointIndex >= 0 && jointIndex < 6) {
       _manipulatorJointVel[jointIndex] = value; // Max speed is 1 as specified
-      _sendManipulatorActionMessage();
+      debugPrint('🦾 Joint $jointIndex = ${value.toStringAsFixed(2)} | All joints: ${_manipulatorJointVel.map((v) => v.toStringAsFixed(2)).join(", ")}');
+      
+      // Always send as action message (not manipulator_action)
+      _sendActionMessage();
     }
   }
 
@@ -176,30 +179,31 @@ class WebSocketService {
   void _sendActionMessage() {
     if (!isConnected) return;
     
+    // Check if any manipulator joints are active
+    bool manipulatorActive = _manipulatorJointVel.any((vel) => vel != 0.0);
+    
     final message = {
       'type': 'action',
       'x.vel': _xVel,
       'y.vel': _yVel,
       'theta.vel': _thetaVel,
-      'wrist_flex.vel': _wristFlexVel,
+      // Wrist flex: use manipulator if active, otherwise use base mode
+      'wrist_flex.vel': manipulatorActive ? _manipulatorJointVel[3] : _wristFlexVel,
+      // All manipulator joint velocities
+      'shoulder_pan.vel': _manipulatorJointVel[0],
+      'shoulder_lift.vel': _manipulatorJointVel[1],
+      'elbow_flex.vel': _manipulatorJointVel[2],
+      'wrist_roll.vel': _manipulatorJointVel[4],
+      'gripper.vel': _manipulatorJointVel[5],
     };
     
+    debugPrint('📤 Sending action: ${json.encode(message)}');
     _sendMessage(message);
   }
 
   void _sendManipulatorActionMessage() {
-    if (!isConnected) return;
-    
-    final message = {
-      'type': 'manipulator_action',
-      'joint_velocities': _manipulatorJointVel,
-      // Keep base commands the same in manipulator mode
-      'x.vel': _xVel,
-      'y.vel': _yVel,
-      'theta.vel': _thetaVel,
-    };
-    
-    _sendMessage(message);
+    // Remove this method - we don't need it anymore
+    // Everything goes through _sendActionMessage()
   }
 
   void _sendMessage(Map<String, dynamic> message) {

@@ -43,8 +43,15 @@ def main():
     robot = LeKiwiClient(robot_config)
     phone_teleop = PhoneTeleop(phone_config)
     
-    # Wrist flex position tracking
-    current_wrist_flex_pos = -50.0  # Starting position (from your fixed arm action)
+    # Joint position tracking for all arm joints (integrate velocities to positions)
+    current_joint_positions = {
+        "shoulder_pan": 0.0,
+        "shoulder_lift": -90.0, 
+        "elbow_flex": 90.0,
+        "wrist_flex": -50.0,
+        "wrist_roll": -50.0,
+        "gripper": 50.0,
+    }
     last_time = time.time()
     
     try:
@@ -57,17 +64,8 @@ def main():
         phone_teleop.connect()
         logger.info("Phone connected!")
         
-        # Fixed arm positions (safe home position) - wrist flex will be controlled by phone
-        base_arm_action = {
-            "arm_shoulder_pan.pos": 0,
-            "arm_shoulder_lift.pos": -90, 
-            "arm_elbow_flex.pos": 90,
-            "arm_wrist_roll.pos": -50,
-            "arm_gripper.pos": 50.0,  # Half open
-        }
-        
         logger.info("Starting teleoperation loop...")
-        logger.info("Phone controls: Left joystick = base movement, Right joystick = rotation + wrist flex")
+        logger.info("Phone controls: Base mode = movement + wrist, Arm mode = all 6 joints")
         
         # Main control loop
         while True:
@@ -100,18 +98,36 @@ def main():
                 "theta.vel": phone_action["theta.vel"],
             }
             
-            # Handle wrist flex velocity - integrate to position
-            wrist_flex_vel = phone_action["wrist_flex.vel"]
-            if abs(wrist_flex_vel) > 0.01:  # Only update if significant velocity
-                # Integrate velocity to position
-                current_wrist_flex_pos += wrist_flex_vel * dt * 60  # Scale factor for reasonable movement
-                # Clamp to reasonable wrist flex limits
-                current_wrist_flex_pos = max(-90, min(90, current_wrist_flex_pos))
+            # Handle ALL joint velocities - integrate to positions
+            joint_velocities = {
+                "shoulder_pan": phone_action["shoulder_pan.vel"],
+                "shoulder_lift": phone_action["shoulder_lift.vel"],
+                "elbow_flex": phone_action["elbow_flex.vel"],
+                "wrist_flex": phone_action["wrist_flex.vel"],
+                "wrist_roll": phone_action["wrist_roll.vel"],
+                "gripper": phone_action["gripper.vel"],
+            }
             
-            # Create full arm action with controlled wrist flex
+            # Integrate velocities to positions for all joints
+            for joint_name, velocity in joint_velocities.items():
+                if abs(velocity) > 0.01:  # Only update if significant velocity
+                    # Integrate velocity to position
+                    current_joint_positions[joint_name] += velocity * dt * 60  # Scale factor
+                    
+                    # Apply joint limits
+                    if joint_name == "gripper":
+                        current_joint_positions[joint_name] = max(0, min(100, current_joint_positions[joint_name]))
+                    else:
+                        current_joint_positions[joint_name] = max(-100, min(100, current_joint_positions[joint_name]))
+            
+            # Create full arm action with all controlled joints
             arm_action = {
-                **base_arm_action,
-                "arm_wrist_flex.pos": current_wrist_flex_pos,
+                "arm_shoulder_pan.pos": current_joint_positions["shoulder_pan"],
+                "arm_shoulder_lift.pos": current_joint_positions["shoulder_lift"], 
+                "arm_elbow_flex.pos": current_joint_positions["elbow_flex"],
+                "arm_wrist_flex.pos": current_joint_positions["wrist_flex"],
+                "arm_wrist_roll.pos": current_joint_positions["wrist_roll"],
+                "arm_gripper.pos": current_joint_positions["gripper"],
             }
             
             # Combine arm and base actions
@@ -121,11 +137,13 @@ def main():
             robot.send_action(full_action)
             
             # Log the received action
-            if (any(abs(v) > 0.01 for v in base_action.values()) or 
-                abs(wrist_flex_vel) > 0.01):
+            active_joints = {k: v for k, v in joint_velocities.items() if abs(v) > 0.01}
+            if (any(abs(v) > 0.01 for v in base_action.values()) or active_joints):
                 logger.info(f"Phone control: base=({base_action['x.vel']:.2f}, "
-                           f"{base_action['y.vel']:.2f}, {base_action['theta.vel']:.1f}), "
-                           f"wrist_flex={current_wrist_flex_pos:.1f} (vel={wrist_flex_vel:.2f})")
+                           f"{base_action['y.vel']:.2f}, {base_action['theta.vel']:.1f})")
+                if active_joints:
+                    logger.info(f"Joint velocities: {active_joints}")
+                    logger.info(f"Joint positions: {dict((k, f'{v:.1f}') for k, v in current_joint_positions.items())}")
             
             # Small delay to avoid overwhelming the system
             time.sleep(0.05)  # 20 Hz

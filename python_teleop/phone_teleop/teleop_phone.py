@@ -78,11 +78,12 @@ class PhoneTeleop(Teleoperator):
     def action_features(self) -> dict[str, type]:
         """Define the action features this teleoperator provides."""
         return {
+            # Base movement velocities
             "x.vel": float,
             "y.vel": float, 
             "theta.vel": float,
-            "wrist_flex.vel": float,
             # Manipulator joint velocities
+            "wrist_flex.vel": float,
             "shoulder_pan.vel": float,
             "shoulder_lift.vel": float,
             "elbow_flex.vel": float,
@@ -180,47 +181,18 @@ class PhoneTeleop(Teleoperator):
             message_type = data.get("type")
             
             if message_type == "action":
-                # Receive velocity commands from phone (base control mode)
+                # Receive ALL commands from phone in single action message
                 x_vel = data.get("x.vel", 0.0)
                 y_vel = data.get("y.vel", 0.0)  
                 theta_vel = data.get("theta.vel", 0.0)
                 wrist_flex_vel = data.get("wrist_flex.vel", 0.0)
                 
-                # Apply velocity limits
-                x_vel = max(-self.config.max_linear_velocity, 
-                           min(self.config.max_linear_velocity, x_vel))
-                y_vel = max(-self.config.max_linear_velocity,
-                           min(self.config.max_linear_velocity, y_vel))
-                theta_vel = max(-self.config.max_angular_velocity,
-                               min(self.config.max_angular_velocity, theta_vel))
-                # Wrist flex velocity doesn't need limiting - it's controlled by the app
-                
-                # Update current action
-                self.current_action = {
-                    "x.vel": x_vel,
-                    "y.vel": y_vel,
-                    "theta.vel": theta_vel,
-                    "wrist_flex.vel": wrist_flex_vel,
-                    # Reset manipulator joints in base mode
-                    "shoulder_pan.vel": 0.0,
-                    "shoulder_lift.vel": 0.0,
-                    "elbow_flex.vel": 0.0,
-                    "wrist_roll.vel": 0.0,
-                    "gripper.vel": 0.0,
-                }
-                
-                # Put action in queue for main thread
-                try:
-                    self.action_queue.put_nowait(self.current_action.copy())
-                except:
-                    pass  # Queue full, skip
-                    
-            elif message_type == "manipulator_action":
-                # Receive manipulator joint commands from phone (manipulator control mode)
-                joint_velocities = data.get("joint_velocities", [0.0] * 6)
-                x_vel = data.get("x.vel", 0.0)
-                y_vel = data.get("y.vel", 0.0)  
-                theta_vel = data.get("theta.vel", 0.0)
+                # Get individual joint velocities
+                shoulder_pan_vel = data.get("shoulder_pan.vel", 0.0)
+                shoulder_lift_vel = data.get("shoulder_lift.vel", 0.0)
+                elbow_flex_vel = data.get("elbow_flex.vel", 0.0)
+                wrist_roll_vel = data.get("wrist_roll.vel", 0.0)
+                gripper_vel = data.get("gripper.vel", 0.0)
                 
                 # Apply velocity limits to base commands
                 x_vel = max(-self.config.max_linear_velocity, 
@@ -230,24 +202,23 @@ class PhoneTeleop(Teleoperator):
                 theta_vel = max(-self.config.max_angular_velocity,
                                min(self.config.max_angular_velocity, theta_vel))
                 
-                # Ensure we have exactly 6 joint velocities
-                if len(joint_velocities) != 6:
-                    joint_velocities = [0.0] * 6
-                
-                # Map joint velocities to named joints
-                # Based on ManipulatorJoysticksWidget: left side = 0,1,2; right side = 3,4,5
+                # Update current action with ALL commands
                 self.current_action = {
                     "x.vel": x_vel,
                     "y.vel": y_vel,
                     "theta.vel": theta_vel,
-                    "wrist_flex.vel": joint_velocities[3] if len(joint_velocities) > 3 else 0.0,  # Right side joint 0
-                    # Manipulator joint velocities
-                    "shoulder_pan.vel": joint_velocities[0] if len(joint_velocities) > 0 else 0.0,    # Left side joint 0
-                    "shoulder_lift.vel": joint_velocities[1] if len(joint_velocities) > 1 else 0.0,   # Left side joint 1
-                    "elbow_flex.vel": joint_velocities[2] if len(joint_velocities) > 2 else 0.0,      # Left side joint 2
-                    "wrist_roll.vel": joint_velocities[4] if len(joint_velocities) > 4 else 0.0,      # Right side joint 1
-                    "gripper.vel": joint_velocities[5] if len(joint_velocities) > 5 else 0.0,         # Right side joint 2
+                    "wrist_flex.vel": wrist_flex_vel,
+                    "shoulder_pan.vel": shoulder_pan_vel,
+                    "shoulder_lift.vel": shoulder_lift_vel,
+                    "elbow_flex.vel": elbow_flex_vel,
+                    "wrist_roll.vel": wrist_roll_vel,
+                    "gripper.vel": gripper_vel,
                 }
+                
+                # Log non-zero joint velocities only
+                active_joints = {k: v for k, v in self.current_action.items() if abs(v) > 0.001}
+                if active_joints:
+                    logger.info(f"🎯 Active commands: {active_joints}")
                 
                 # Put action in queue for main thread
                 try:
