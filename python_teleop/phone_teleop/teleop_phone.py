@@ -11,6 +11,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+import torch
 import websockets
 from websockets import WebSocketClientProtocol
 
@@ -18,14 +19,6 @@ from lerobot.common.errors import DeviceAlreadyConnectedError, DeviceNotConnecte
 from lerobot.common.teleoperators.teleoperator import Teleoperator
 
 from .configuration_phone import PhoneTeleopConfig
-
-# Import torch if available (for handling torch tensors from robot)
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    torch = None
-    TORCH_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +29,9 @@ class PhoneTeleop(Teleoperator):
     
     Sends robot observations (state vector + camera feeds) to phone and 
     receives velocity commands back for robot control.
+    
+    Internally integrates joint velocities to positions and returns joint positions
+    for arm control and velocities for base control.
     """
 
     config_class = PhoneTeleopConfig
@@ -56,7 +52,7 @@ class PhoneTeleop(Teleoperator):
         self.observation_queue = Queue(maxsize=10)
         
         # Current action state (velocity commands from phone)
-        self.current_action = {
+        self.current_velocity_action = {
             "x.vel": 0.0,           # Linear velocity X (forward/backward) 
             "y.vel": 0.0,           # Linear velocity Y (left/right)
             "theta.vel": 0.0,       # Angular velocity (rotation)
@@ -68,6 +64,17 @@ class PhoneTeleop(Teleoperator):
             "wrist_roll.vel": 0.0,
             "gripper.vel": 0.0,
         }
+        
+        # Joint position tracking for all arm joints (integrate velocities to positions)
+        self.current_joint_positions = {
+            "shoulder_pan": 0.0,
+            "shoulder_lift": -90.0, 
+            "elbow_flex": 90.0,
+            "wrist_flex": -50.0,
+            "wrist_roll": -50.0,
+            "gripper": 50.0,
+        }
+        self.last_time = time.time()
         
         # Connection state
         self._connected = False
@@ -82,13 +89,13 @@ class PhoneTeleop(Teleoperator):
             "x.vel": float,
             "y.vel": float, 
             "theta.vel": float,
-            # Manipulator joint velocities
-            "wrist_flex.vel": float,
-            "shoulder_pan.vel": float,
-            "shoulder_lift.vel": float,
-            "elbow_flex.vel": float,
-            "wrist_roll.vel": float,
-            "gripper.vel": float,
+            # Manipulator joint positions
+            "arm_shoulder_pan.pos": float,
+            "arm_shoulder_lift.pos": float,
+            "arm_elbow_flex.pos": float,
+            "arm_wrist_flex.pos": float,
+            "arm_wrist_roll.pos": float,
+            "arm_gripper.pos": float,
         }
 
     @property
@@ -203,7 +210,7 @@ class PhoneTeleop(Teleoperator):
                                min(self.config.max_angular_velocity, theta_vel))
                 
                 # Update current action with ALL commands
-                self.current_action = {
+                self.current_velocity_action = {
                     "x.vel": x_vel,
                     "y.vel": y_vel,
                     "theta.vel": theta_vel,
@@ -216,13 +223,13 @@ class PhoneTeleop(Teleoperator):
                 }
                 
                 # Log non-zero joint velocities only
-                active_joints = {k: v for k, v in self.current_action.items() if abs(v) > 0.001}
+                active_joints = {k: v for k, v in self.current_velocity_action.items() if abs(v) > 0.001}
                 if active_joints:
                     logger.info(f"🎯 Active commands: {active_joints}")
                 
                 # Put action in queue for main thread
                 try:
-                    self.action_queue.put_nowait(self.current_action.copy())
+                    self.action_queue.put_nowait(self.current_velocity_action.copy())
                 except:
                     pass  # Queue full, skip
                     
@@ -240,7 +247,7 @@ class PhoneTeleop(Teleoperator):
         pass
 
     def get_action(self) -> dict[str, Any]:
-        """Get latest action from phone."""
+        """Get latest action from phone - returns joint positions and base velocities."""
         before_read_t = time.perf_counter()
 
         if not self.is_connected:
@@ -251,13 +258,55 @@ class PhoneTeleop(Teleoperator):
         # Get latest action from queue, or use current action
         try:
             while True:
-                self.current_action = self.action_queue.get_nowait()
+                self.current_velocity_action = self.action_queue.get_nowait()
         except Empty:
             pass  # Use last known action
 
+        # Integrate joint velocities to positions
+        current_time = time.time()
+        dt = current_time - self.last_time
+        self.last_time = current_time
+        
+        # Extract joint velocities from current action
+        joint_velocities = {
+            "shoulder_pan": self.current_velocity_action["shoulder_pan.vel"],
+            "shoulder_lift": self.current_velocity_action["shoulder_lift.vel"],
+            "elbow_flex": self.current_velocity_action["elbow_flex.vel"],
+            "wrist_flex": self.current_velocity_action["wrist_flex.vel"],
+            "wrist_roll": self.current_velocity_action["wrist_roll.vel"],
+            "gripper": self.current_velocity_action["gripper.vel"],
+        }
+        
+        # Integrate velocities to positions for all joints
+        for joint_name, velocity in joint_velocities.items():
+            if abs(velocity) > 0.01:  # Only update if significant velocity
+                # Integrate velocity to position
+                self.current_joint_positions[joint_name] += velocity * dt * 60  # Scale factor
+                
+                # Apply joint limits
+                if joint_name == "gripper":
+                    self.current_joint_positions[joint_name] = max(0, min(100, self.current_joint_positions[joint_name]))
+                else:
+                    self.current_joint_positions[joint_name] = max(-100, min(100, self.current_joint_positions[joint_name]))
+        
+        # Create action with joint positions and base velocities
+        action = {
+            # Base movement velocities
+            "x.vel": self.current_velocity_action["x.vel"],
+            "y.vel": self.current_velocity_action["y.vel"], 
+            "theta.vel": self.current_velocity_action["theta.vel"],
+            # Manipulator joint positions
+            "arm_shoulder_pan.pos": self.current_joint_positions["shoulder_pan"],
+            "arm_shoulder_lift.pos": self.current_joint_positions["shoulder_lift"], 
+            "arm_elbow_flex.pos": self.current_joint_positions["elbow_flex"],
+            "arm_wrist_flex.pos": self.current_joint_positions["wrist_flex"],
+            "arm_wrist_roll.pos": self.current_joint_positions["wrist_roll"],
+            "arm_gripper.pos": self.current_joint_positions["gripper"],
+        }
+
         self.logs["read_pos_dt_s"] = time.perf_counter() - before_read_t
         
-        return self.current_action.copy()
+        return action
 
     def send_feedback(self, observation: dict[str, Any]) -> None:
         """Send robot observation to phone."""
@@ -284,7 +333,7 @@ class PhoneTeleop(Teleoperator):
             
             # Process observation data
             for key, value in observation.items():
-                if TORCH_AVAILABLE and torch is not None and isinstance(value, torch.Tensor):
+                if isinstance(value, torch.Tensor):
                     # Handle torch tensors (convert to numpy first)
                     value_np = value.numpy()
                     if value_np.ndim == 3:  # Camera image
