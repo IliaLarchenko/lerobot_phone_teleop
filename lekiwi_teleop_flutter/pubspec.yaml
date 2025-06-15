@@ -1,0 +1,35 @@
+name: lekiwi_teleop_flutter
+description: "A Flutter robot teleoperation app for LeKiwi mobile manipulator."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.4 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.6
+
+  # Networking - App is the SERVER
+  shelf: ^1.4.1
+  shelf_web_socket: ^2.0.0
+  network_info_plus: ^5.0.3 # To get device IP
+
+  # Hardware
+  sensors_plus: ^5.0.1
+  wakelock_plus: ^1.2.8
+  permission_handler: ^11.4.0
+
+  # Storage
+  shared_preferences: ^2.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true 
