@@ -48,7 +48,7 @@ class WebSocketService {
       _ipController.add(_deviceIp);
       debugPrint('📱 Phone IP: $_deviceIp');
 
-      var handler = webSocketHandler((WebSocketChannel webSocket) {
+      var handler = webSocketHandler((WebSocketChannel webSocket, String? protocol) {
         debugPrint('🤖 Robot connected!');
         _channel = webSocket;
         _connectionController.add(true);
