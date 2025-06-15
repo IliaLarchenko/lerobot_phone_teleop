@@ -74,7 +74,7 @@ flutter run
 
 It will automatically start the app on your phone.
 Your phone should be connected to the same WiFi network as your computer.
-App will show you the IP address of your phone, something like `192.168.1.102:8080`.
+App will show you the IP address of your phone, something like `192.168.1.100:8080` - use it in the teleoperation script.
 
 
 ### 2. Run LeRobot on LeKiwi Robot
