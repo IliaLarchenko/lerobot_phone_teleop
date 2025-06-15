@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Additional cleanup for mobile-only project
+/android/local.properties
+**/android/build/
+**/ios/build/
+
+# Platform directories not needed for mobile-only
+/web/
+/windows/
+/macos/
+/linux/
