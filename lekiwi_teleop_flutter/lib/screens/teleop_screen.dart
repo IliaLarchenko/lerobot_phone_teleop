@@ -5,9 +5,10 @@ import '../services/websocket_service.dart';
 import '../widgets/connection_widget.dart';
 import '../widgets/joystick_widget.dart';
 import '../widgets/video_display_widget.dart';
-import '../widgets/imu_control_widget.dart';
 import '../widgets/arm_rotation_joystick_widget.dart';
 import '../widgets/manipulator_joysticks_widget.dart';
+
+enum VideoDisplayMode { dual, frontFullscreen, wristFullscreen }
 
 class TeleopScreen extends StatefulWidget {
   const TeleopScreen({super.key});
@@ -22,6 +23,7 @@ class _TeleopScreenState extends State<TeleopScreen> {
   // State
   bool _useIMU = false;
   bool _manipulatorMode = false; // New mode toggle
+  VideoDisplayMode _videoDisplayMode = VideoDisplayMode.dual;
   Map<String, dynamic>? _latestObservationData;
   StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
 
@@ -70,15 +72,15 @@ class _TeleopScreenState extends State<TeleopScreen> {
                     child: ConnectionWidget(webSocketService: _webSocketService),
                   ),
 
-                  // Robot State - very top right corner (slightly higher)
+                  // Robot State - top right corner (moved down for better visibility)
                   Positioned(
-                    top: -4, // Moved slightly higher
+                    top: 12, // Moved down from -4 to 12
                     right: 0,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         _buildCompactStateDisplay(),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 8),
                         _buildModeSwitch(),
                       ],
                     ),
@@ -154,59 +156,109 @@ class _TeleopScreenState extends State<TeleopScreen> {
   }
 
   Widget _buildModeSwitch() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.grey[200]?.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'MAN',
-            style: TextStyle(
-              color: Colors.grey[800],
-              fontSize: 8,
-              fontWeight: FontWeight.w600,
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Arm',
+          style: TextStyle(
+            color: Colors.grey.shade300,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
           ),
-          const SizedBox(width: 4),
-          Transform.scale(
-            scale: 0.6,
-            child: Switch(
-              value: _manipulatorMode,
-              onChanged: (value) => setState(() => _manipulatorMode = value),
-              activeTrackColor: Colors.blue.shade700,
-              activeColor: Colors.blue.shade300,
-              inactiveTrackColor: Colors.grey.shade600,
-              inactiveThumbColor: Colors.grey.shade400,
-            ),
+        ),
+        const SizedBox(width: 6),
+        Transform.scale(
+          scale: 0.7,
+          child: Switch(
+            value: _manipulatorMode,
+            onChanged: (value) => setState(() => _manipulatorMode = value),
+            activeTrackColor: Colors.blue.shade700,
+            activeColor: Colors.blue.shade300,
+            inactiveTrackColor: Colors.grey.shade600,
+            inactiveThumbColor: Colors.grey.shade400,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildVideoBackground() {
-    return Row(
-      children: [
-        // Front camera (left side)
-        Expanded(
-          child: VideoDisplayWidget(
-            observationData: _latestObservationData, 
-            cameraKey: 'front'
-          )
-        ),
-        // Wrist camera (right side)  
-        Expanded(
-          child: VideoDisplayWidget(
-            observationData: _latestObservationData, 
-            cameraKey: 'wrist'
-          )
-        ),
-      ],
-    );
+    switch (_videoDisplayMode) {
+      case VideoDisplayMode.dual:
+        return Row(
+          children: [
+            // Front camera (left side)
+            Expanded(
+              child: VideoDisplayWidget(
+                observationData: _latestObservationData, 
+                cameraKey: 'front',
+                onTitleTap: () => setState(() => _videoDisplayMode = VideoDisplayMode.frontFullscreen),
+              )
+            ),
+            // Wrist camera (right side)  
+            Expanded(
+              child: VideoDisplayWidget(
+                observationData: _latestObservationData, 
+                cameraKey: 'wrist',
+                onTitleTap: () => setState(() => _videoDisplayMode = VideoDisplayMode.wristFullscreen),
+              )
+            ),
+          ],
+        );
+      case VideoDisplayMode.frontFullscreen:
+        return Stack(
+          children: [
+            // Front camera fullscreen
+            VideoDisplayWidget(
+              observationData: _latestObservationData, 
+              cameraKey: 'front',
+              onTitleTap: () => setState(() => _videoDisplayMode = VideoDisplayMode.dual),
+            ),
+            // Wrist camera thumbnail in top-left
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                width: 120,
+                height: 90,
+                child: VideoDisplayWidget(
+                  observationData: _latestObservationData, 
+                  cameraKey: 'wrist',
+                  isThumbnail: true,
+                  onTitleTap: () => setState(() => _videoDisplayMode = VideoDisplayMode.dual),
+                ),
+              ),
+            ),
+          ],
+        );
+      case VideoDisplayMode.wristFullscreen:
+        return Stack(
+          children: [
+            // Wrist camera fullscreen
+            VideoDisplayWidget(
+              observationData: _latestObservationData, 
+              cameraKey: 'wrist',
+              onTitleTap: () => setState(() => _videoDisplayMode = VideoDisplayMode.dual),
+            ),
+            // Front camera thumbnail in top-left
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                width: 120,
+                height: 90,
+                child: VideoDisplayWidget(
+                  observationData: _latestObservationData, 
+                  cameraKey: 'front',
+                  isThumbnail: true,
+                  onTitleTap: () => setState(() => _videoDisplayMode = VideoDisplayMode.dual),
+                ),
+              ),
+            ),
+          ],
+        );
+    }
   }
 
   Widget _buildCompactStateDisplay() {

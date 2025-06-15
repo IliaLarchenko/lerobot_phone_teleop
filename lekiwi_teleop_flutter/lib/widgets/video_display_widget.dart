@@ -5,11 +5,15 @@ import 'package:flutter/material.dart';
 class VideoDisplayWidget extends StatelessWidget {
   final Map<String, dynamic>? observationData;
   final String cameraKey; // Should be 'front' or 'wrist'
+  final bool isThumbnail; // New parameter for thumbnail mode
+  final VoidCallback? onTitleTap; // New parameter for click handling
 
   const VideoDisplayWidget({
     super.key,
     required this.observationData,
     required this.cameraKey,
+    this.isThumbnail = false,
+    this.onTitleTap,
   });
 
   @override
@@ -26,11 +30,26 @@ class VideoDisplayWidget extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.videocam_off, size: 48, color: Colors.grey),
-              SizedBox(height: 8),
-              Text('${cameraKey.toUpperCase()} Camera', 
-                   style: TextStyle(color: Colors.grey, fontSize: 12)),
-              Text('No Signal', style: TextStyle(color: Colors.grey, fontSize: 10)),
+              Icon(
+                Icons.videocam_off, 
+                size: isThumbnail ? 24 : 48, 
+                color: Colors.grey
+              ),
+              SizedBox(height: isThumbnail ? 4 : 8),
+              Text(
+                '${cameraKey.toUpperCase()} Camera', 
+                style: TextStyle(
+                  color: Colors.grey, 
+                  fontSize: isThumbnail ? 8 : 12
+                )
+              ),
+              Text(
+                'No Signal', 
+                style: TextStyle(
+                  color: Colors.grey, 
+                  fontSize: isThumbnail ? 6 : 10
+                )
+              ),
             ],
           ),
         ),
@@ -52,27 +71,38 @@ class VideoDisplayWidget extends StatelessWidget {
             gaplessPlayback: true, // Prevents blinking on image update
             errorBuilder: (context, error, stackTrace) {
               return Center(
-                child: Text('${cameraKey.toUpperCase()} Error', 
-                           style: TextStyle(color: Colors.red))
+                child: Text(
+                  '${cameraKey.toUpperCase()} Error', 
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: isThumbnail ? 8 : 12,
+                  )
+                )
               );
             },
           ),
-          // Camera label overlay
+          // Camera label overlay with click handling
           Positioned(
-            top: 8,
-            left: 8,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                cameraKey.toUpperCase(),
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+            top: isThumbnail ? 4 : 8,
+            left: isThumbnail ? 4 : 8,
+            child: GestureDetector(
+              onTap: onTitleTap,
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isThumbnail ? 4 : 8, 
+                  vertical: isThumbnail ? 2 : 4
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  cameraKey.toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: isThumbnail ? 8 : 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -86,11 +116,26 @@ class VideoDisplayWidget extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error, size: 48, color: Colors.red),
-              SizedBox(height: 8),
-              Text('${cameraKey.toUpperCase()} Camera', 
-                   style: TextStyle(color: Colors.red, fontSize: 12)),
-              Text('Decode Error', style: TextStyle(color: Colors.red, fontSize: 10)),
+              Icon(
+                Icons.error, 
+                size: isThumbnail ? 24 : 48, 
+                color: Colors.red
+              ),
+              SizedBox(height: isThumbnail ? 4 : 8),
+              Text(
+                '${cameraKey.toUpperCase()} Camera', 
+                style: TextStyle(
+                  color: Colors.red, 
+                  fontSize: isThumbnail ? 8 : 12
+                )
+              ),
+              Text(
+                'Decode Error', 
+                style: TextStyle(
+                  color: Colors.red, 
+                  fontSize: isThumbnail ? 6 : 10
+                )
+              ),
             ],
           ),
         ),
