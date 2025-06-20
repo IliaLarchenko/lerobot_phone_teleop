@@ -14,6 +14,7 @@ This example:
 import logging
 import time
 import torch
+import argparse
 
 from lerobot.common.robots.lekiwi import LeKiwiClient, LeKiwiClientConfig
 from lerobot.common.teleoperators.phone_teleop.configuration_phone import PhoneTeleopConfig
@@ -23,19 +24,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--robot-ip', type=str, default="192.168.1.1", help='IP address of the LeKiwi robot')
+    parser.add_argument('--phone-ip', type=str, default="192.168.1.1", help='IP address of the phone')
+    args = parser.parse_args()
+
     # Robot configuration
     robot_config = LeKiwiClientConfig(
-        remote_ip="LEKIWI_ROBOT_IP", 
+        remote_ip=args.robot_ip,
         id="my_awesome_kiwi"
     )
     
-    # Phone teleoperator configuration - set your phone's IP address here
+    # Phone teleoperator configuration
     phone_config = PhoneTeleopConfig(
-        phone_ip="PHONE_IP",  # Change this to your phone's IP
+        phone_ip=args.phone_ip,
         phone_port=8080,
         video_quality=70,  # Lower quality for faster streaming
         max_linear_velocity=0.25,  # Updated to match app settings
-        max_angular_velocity=60.0, # Updated to match app settings  
+        max_angular_velocity=60.0  # Updated to match app settings
     )
     
     # Create robot and phone teleoperator
