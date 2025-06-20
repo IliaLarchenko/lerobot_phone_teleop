@@ -37,6 +37,47 @@ class WebSocketService {
   static const double maxRotationVel = 60.0;
   static const double maxWristFlexVel = 1.0;
 
+  Future<String?> _findLocalIp() async {
+    try {
+      // List all network interfaces
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.IPv4,
+      );
+
+      for (final interface in interfaces) {
+        // Log interface details for debugging
+        debugPrint('🔎 Interface: ${interface.name}');
+        for (final addr in interface.addresses) {
+          debugPrint('  - Address: ${addr.address}, type: ${addr.type}');
+          // When hotspot is active on Android, the IP is typically 192.168.x.x
+          // On iOS, it's often 172.20.x.x
+          // These are common private IP ranges for local networks.
+          if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
+            // Prioritize hotspot/local wifi IPs
+            if (addr.address.startsWith('192.168.') || addr.address.startsWith('172.20.')) {
+              debugPrint('✅ Found potential hotspot IP: ${addr.address}');
+              return addr.address;
+            }
+          }
+        }
+      }
+
+      // Fallback for standard WiFi connection if no hotspot IP was found
+      final wifiIP = await NetworkInfo().getWifiIP();
+      if (wifiIP != null) {
+        debugPrint('✅ Found WiFi IP via fallback: $wifiIP');
+        return wifiIP;
+      }
+    } catch (e) {
+      debugPrint('❌ Error getting local IP: $e');
+    }
+
+    // Final fallback if everything else fails
+    debugPrint('⚠️ Could not determine local IP. Falling back to 0.0.0.0');
+    return '0.0.0.0';
+  }
+
   Future<void> startServer() async {
     if (_server != null) {
       debugPrint('Server already running.');
@@ -44,7 +85,7 @@ class WebSocketService {
     }
 
     try {
-      _deviceIp = await NetworkInfo().getWifiIP();
+      _deviceIp = await _findLocalIp();
       _ipController.add(_deviceIp);
       debugPrint('📱 Phone IP: $_deviceIp');
 
